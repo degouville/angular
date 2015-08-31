@@ -1,0 +1,25 @@
+{
+  "MyComponent": {
+    "kind": "type",
+    "value": {
+      "id": "MyComponent",
+      "selector": "[soup]",
+      "compileChildren": true,
+      "hostProperties": {},
+      "hostListeners": {},
+      "hostAttributes": {},
+      "properties": [],
+      "readAttributes": [],
+      "type": 1,
+      "exportAs": null,
+      "callOnDestroy": false,
+      "callDoCheck": false,
+      "callOnInit": false,
+      "callOnChanges": false,
+      "callAfterContentChecked": false,
+      "events": [],
+      "changeDetection": null,
+      "version": 1
+    }
+  }
+}

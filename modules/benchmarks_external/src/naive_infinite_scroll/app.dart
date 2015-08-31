@@ -29,7 +29,7 @@ class App implements ShadowRootAware {
     int appSize = getIntParameter('appSize');
     iterationCount = getIntParameter('iterationCount');
     scrollIncrement = getIntParameter('scrollIncrement');
-    appSize = appSize > 1 ? appSize - 1 : 0;  // draw at least one table
+    appSize = appSize > 1 ? appSize - 1 : 0; // draw at least one table
     scrollAreas = new List.generate(appSize, (i) => i);
   }
 

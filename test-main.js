@@ -1,7 +1,5 @@
-// Use "register" extension from systemjs.
-// That's what Traceur outputs: `System.register()`.
-register(System);
-cjs(System);
+// Tun on full stack traces in errors to help debugging
+Error.stackTraceLimit=Infinity;
 
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 100;
 
@@ -9,18 +7,19 @@ jasmine.DEFAULT_TIMEOUT_INTERVAL = 100;
 // we will call `__karma__.start()` later, once all the specs are loaded.
 __karma__.loaded = function() {};
 
-
-System.baseURL = '/base/modules/';
-
-// So that we can import packages like `core/foo`, instead of `core/src/foo`.
-System.paths = {
-  '*': './*.js',
-  'transpiler/*': '../tools/transpiler/*.js',
-  'rx/*': '../node_modules/rx/*.js'
-}
+System.config({
+  baseURL: '/base/',
+  defaultJSExtensions: true,
+  paths: {
+    'benchpress/*': 'dist/js/dev/es5/benchpress/*.js',
+    'angular2/*': 'dist/js/dev/es5/angular2/*.js',
+    'rtts_assert/*': 'dist/js/dev/es5/rtts_assert/*.js',
+    'rx': 'node_modules/rx/dist/rx.js'
+  }
+});
 
 // Import all the specs, execute their `main()` method and kick off Karma (Jasmine).
-System.import('angular2/src/dom/browser_adapter').then(function(browser_adapter) {
+System.import('angular2/src/core/dom/browser_adapter').then(function(browser_adapter) {
   browser_adapter.BrowserDomAdapter.makeCurrent();
 }).then(function() {
   return Promise.all(
@@ -40,8 +39,7 @@ System.import('angular2/src/dom/browser_adapter').then(function(browser_adapter)
 .then(function() {
   __karma__.start();
 }, function(error) {
-  console.error(error.stack || error);
-  __karma__.start();
+  __karma__.error(error.stack || error);
 });
 
 

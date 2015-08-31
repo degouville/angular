@@ -1,5 +1,3 @@
-// load traceur runtime as our tests are written in es6
-require('traceur/bin/traceur-runtime.js');
 var fs = require('fs-extra');
 
 var argv = require('yargs')
@@ -61,7 +59,7 @@ var BROWSER_CAPS = {
     browserName: 'chrome',
     chromeOptions: mergeInto(CHROME_OPTIONS, {
       'mobileEmulation': CHROME_MOBILE_EMULATION,
-      'binary': process.env.DARTIUM
+      'binary': process.env.DARTIUM_BIN
     }),
     loggingPrefs: {
       performance: 'ALL',
@@ -71,7 +69,10 @@ var BROWSER_CAPS = {
   ChromeDesktop: {
     browserName: 'chrome',
     chromeOptions: mergeInto(CHROME_OPTIONS, {
-      'mobileEmulation': CHROME_MOBILE_EMULATION
+      // TODO(tbosch): when we are using mobile emulation on
+      // chrome 44.0 beta, clicks are no more working.
+      // see https://github.com/angular/angular/issues/2309
+      // 'mobileEmulation': CHROME_MOBILE_EMULATION
     }),
     loggingPrefs: {
       performance: 'ALL',
@@ -188,17 +189,20 @@ var config = exports.config = {
 function patchProtractorWait(browser) {
   browser.ignoreSynchronization = true;
   var _get = browser.get;
-  var sleepInterval = process.env.TRAVIS || process.env.JENKINS_URL ? 7000 : 3000;
+  var sleepInterval = process.env.TRAVIS || process.env.JENKINS_URL ? 14000 : 8000;
   browser.get = function() {
     var result = _get.apply(this, arguments);
-    browser.sleep(sleepInterval);
+    browser.driver.wait(protractor.until.elementLocated(By.js('var cs = document.body.children; var isLoading = false; for (var i = 0; i < cs.length; i++) {if (cs[i].textContent.indexOf("Loading...") > -1) isLoading = true; } return !isLoading ? document.body.children : null')), sleepInterval);
     return result;
   }
 }
 
 exports.createBenchpressRunner = function(options) {
+  // benchpress will also load traceur runtime as our tests are written in es6
+  var benchpress = require('./dist/build/benchpress_bundle');
+  global.benchpress = benchpress;
+
   var nodeUuid = require('node-uuid');
-  var benchpress = require('./dist/js/cjs/benchpress/benchpress');
 
   // TODO(tbosch): add cloud reporter again (only when !options.test)
   // var cloudReporterConfig;
@@ -221,10 +225,8 @@ exports.createBenchpressRunner = function(options) {
   var bindings = [
     benchpress.SeleniumWebDriverAdapter.PROTRACTOR_BINDINGS,
     benchpress.bind(benchpress.Options.FORCE_GC).toValue(argv['force-gc']),
-    benchpress.bind(benchpress.Options.DEFAULT_DESCRIPTION).toValue({
-      'lang': options.lang,
-      'runId': runId
-    }),
+    benchpress.bind(benchpress.Options.DEFAULT_DESCRIPTION)
+        .toValue({'lang': options.lang, 'runId': runId}),
     benchpress.JsonFileReporter.BINDINGS,
     benchpress.bind(benchpress.JsonFileReporter.PATH).toValue(resultsFolder)
   ];

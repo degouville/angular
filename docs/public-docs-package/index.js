@@ -1,13 +1,26 @@
 var Package = require('dgeni').Package;
-var basePackage = require('../dgeni-package');
-var linksPackage = require('../links-package');
+var basePackage = require('../docs-package');
 
-module.exports = new Package('angular-public', [basePackage, linksPackage])
+module.exports = new Package('angular-v2-public-docs', [basePackage])
 
-.processor(require('./processors/filterPublicDocs'))
+.config(function(readTypeScriptModules) {
+  readTypeScriptModules.sourceFiles = [
+    'angular2/metadata.ts',
+    'angular2/change_detection.ts',
+    'angular2/core.ts',
+    'angular2/di.ts',
+    'angular2/directives.ts',
+    'angular2/http.ts',
+    'angular2/forms.ts',
+    'angular2/router.ts',
+    'angular2/test.ts',
+    'angular2/pipes.ts'
+  ];
+  readTypeScriptModules.hidePrivateMembers = true;
+})
 
-.config(function(captureClassMembers) {
-  captureClassMembers.ignorePrivateMembers = true;
+.config(function(getLinkInfo) {
+  getLinkInfo.useFirstAmbiguousLink = false;
 })
 
 // Configure file writing

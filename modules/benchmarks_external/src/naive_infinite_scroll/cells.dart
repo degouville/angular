@@ -8,10 +8,7 @@ import 'common.dart';
     template: '''
     <div style="width: {{width}}">{{company.name}}</div>
     ''',
-    map: const {
-        'company': '=>company',
-        'cell-width': '=>width',
-    })
+    map: const {'company': '=>company', 'cell-width': '=>width',})
 class CompanyNameComponent {
   String width;
   Company company;
@@ -22,10 +19,7 @@ class CompanyNameComponent {
     template: '''
     <div style="width: {{width}}">{{opportunity.name}}</div>
     ''',
-    map: const {
-        'opportunity': '=>opportunity',
-        'cell-width': '=>width',
-    })
+    map: const {'opportunity': '=>opportunity', 'cell-width': '=>width',})
 class OpportunityNameComponent {
   String width;
   Opportunity opportunity;
@@ -36,10 +30,7 @@ class OpportunityNameComponent {
     template: '''
     <div style="width: {{width}}">{{offering.name}}</div>
     ''',
-    map: const {
-        'offering': '=>offering',
-        'cell-width': '=>width',
-    })
+    map: const {'offering': '=>offering', 'cell-width': '=>width',})
 class OfferingNameComponent {
   String width;
   Offering offering;
@@ -52,10 +43,8 @@ class Stage {
   Function apply;
 
   String get styleString => style != null
-    ? style.keys
-        .map((prop) => '$prop: ${style[prop]}')
-        .join(';')
-    : '';
+      ? style.keys.map((prop) => '$prop: ${style[prop]}').join(';')
+      : '';
 }
 
 @Component(
@@ -70,10 +59,7 @@ class Stage {
         </button>
     </div>
     ''',
-    map: const {
-        'offering': '=>offering',
-        'cell-width': '=>width',
-    })
+    map: const {'offering': '=>offering', 'cell-width': '=>width',})
 class StageButtonsComponent {
   Offering _offering;
   List<Stage> stages;
@@ -92,26 +78,20 @@ class StageButtonsComponent {
 
   _computeStageButtons() {
     bool disabled = true;
-    stages = STATUS_LIST
-    .map((String status) {
+    stages = STATUS_LIST.map((String status) {
       bool isCurrent = offering.status == status;
       var stage = new Stage();
       stage
         ..name = status
         ..isDisabled = disabled
         ..style = {
-          'background-color': disabled
-          ? '#DDD'
-          : isCurrent
-          ? '#DDF'
-          : '#FDD'
-      };
+          'background-color': disabled ? '#DDD' : isCurrent ? '#DDF' : '#FDD'
+        };
       if (isCurrent) {
         disabled = false;
       }
       return stage;
-    })
-    .toList();
+    }).toList();
   }
 }
 
@@ -124,10 +104,7 @@ class StageButtonsComponent {
       </a>
     </div>
     ''',
-    map: const {
-        'account': '=>account',
-        'cell-width': '=>width',
-    })
+    map: const {'account': '=>account', 'cell-width': '=>width',})
 class AccountCellComponent {
   Account account;
   String width;
@@ -136,10 +113,7 @@ class AccountCellComponent {
 @Component(
     selector: 'formatted-cell',
     template: '''<div style="width: {{width}}">{{formattedValue}}</div>''',
-    map: const {
-        'value': '=>value',
-        'cell-width': '=>width',
-    })
+    map: const {'value': '=>value', 'cell-width': '=>width',})
 class FormattedCellComponent {
   String formattedValue;
   String width;

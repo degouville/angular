@@ -8,6 +8,7 @@ JS and Dart versions. It also explains the basic mechanics of using `git`, `node
 * [Environment Variable Setup](#environment-variable-setup)
 * [Installing NPM Modules and Dart Packages](#installing-npm-modules-and-dart-packages)
 * [Running Tests Locally](#running-tests-locally)
+* [Formatting](#clang-format)
 * [Project Information](#project-information)
 * [CI using Travis](#ci-using-travis)
 * [Transforming Dart code](#transforming-dart-code)
@@ -21,7 +22,7 @@ if you'd like to contribute to Angular.
 Before you can build and test Angular, you must install and configure the
 following products on your development machine:
 
-* [Dart](https://www.dartlang.org) (version ` >=1.9.0 <2.0.0`), specifically the Dart-SDK and
+* [Dart](https://www.dartlang.org) (version ` >=1.10.0-dev.1.10 <2.0.0`), specifically the Dart-SDK and
   Dartium (a version of [Chromium](http://www.chromium.org) with native support for Dart through
   the Dart VM). One of the **simplest** ways to get both is to install the **Dart Editor bundle**,
   which includes the editor, SDK and Dartium. See the [Dart tools](https://www.dartlang.org/tools)
@@ -33,9 +34,10 @@ following products on your development machine:
   [Windows](http://windows.github.com)); [GitHub's Guide to Installing
   Git](https://help.github.com/articles/set-up-git) is a good source of information.
 
-* [Node.js](http://nodejs.org), which is used to run a development web server, run tests, and
-  generate distributable files. We also use Node's Package Manager, `npm`, which comes with Node.
-  Depending on your system, you can install Node either from source or as a pre-packaged bundle.
+* [Node.js](http://nodejs.org), (version `>=0.12.0 <0.13.0`) which is used to run a development web server, 
+  run tests, and generate distributable files. We also use Node's Package Manager, `npm` 
+  (version `>=2.0 <3.0`), which comes with Node. Depending on your system, you can install Node either from 
+  source or as a pre-packaged bundle.
 
 * [Chrome Canary](https://www.google.com/chrome/browser/canary.html), a version of Chrome with
   bleeding edge functionality, built especially for developers (and early adopters).
@@ -133,6 +135,12 @@ You can selectively build either the JS or Dart versions as follows:
 * `$(npm bin)/gulp build.js`
 * `$(npm bin)/gulp build.dart`
 
+Also note that in order for the whole test suite to succeed you will need to generate the type definitions by running:
+
+```shell
+$(npm bin)/gulp docs/typings
+```
+
 To clean out the `dist` folder, run:
 
 ```shell
@@ -155,7 +163,7 @@ You can selectively run either the JS or Dart versions as follows:
 
 You can run just the unit tests as follows:
 
-* `$(npm bin)/gulp test.unit.js`: JS tests in a browser; runs in **watch mode** (i.e. karma
+* `$(npm bin)/gulp test.unit.js`: JS tests in a browser; runs in **watch mode** (i.e.
    watches the test files for changes and re-runs tests when files are updated).
 * `$(npm bin)/gulp test.unit.cjs`: JS tests in NodeJS; runs in **watch mode**.
 * `$(npm bin)/gulp test.unit.dart`: Dart tests in Dartium; runs in **watch mode**.
@@ -166,19 +174,21 @@ If you prefer running tests in "single-run" mode rather than watch mode use:
 * `$(npm bin)/gulp test.unit.cjs/ci`
 * `$(npm bin)/gulp test.unit.dart/ci`
 
+The task updates the dist folder with transpiled code whenever a source or test file changes, and
+Karma is run against the new output.
+
 **Note**: If you want to only run a single test you can alter the test you wish to run by changing
 `it` to `iit` or `describe` to `ddescribe`. This will only run that individual test and make it
 much easier to debug. `xit` and `xdescribe` can also be useful to exclude a test and a group of
 tests respectively.
 
-**Note for transpiler tests**: The karma preprocessor is setup in a way so that after every test
-run the transpiler is reloaded. With that it is possible to make changes to the preprocessor and
-run the tests without exiting karma (just touch a test file that you would like to run).
+**Note**: **watch mode** needs symlinks to work, so if you're using windows, ensure you have the
+rights to built them in your operating system.
 
-### E2e tests
+### E2E tests
 
 1. `$(npm bin)/gulp build.js.cjs` (builds benchpress and tests into `dist/js/cjs` folder).
-2. `$(npm bin)/gulp serve.js.prod serve.js.dart2js` (runs a local webserver).
+2. `$(npm bin)/gulp serve.js.prod serve.dart` (runs a local webserver).
 3. `$(npm bin)/protractor protractor-js.conf.js`: JS e2e tests.
 4. `$(npm bin)/protractor protractor-dart2js.conf.js`: dart2js e2e tests.
 
@@ -188,12 +198,63 @@ Angular specific command line options when running protractor:
 ### Performance tests
 
 1. `$(npm bin)/gulp build.js.cjs` (builds benchpress and tests into `dist/js/cjs` folder)
-2. `$(npm bin)/gulp serve.js.prod serve.js.dart2js` (runs a local webserver)
+2. `$(npm bin)/gulp serve.js.prod serve.dart` (runs a local webserver)
 3. `$(npm bin)/protractor protractor-js.conf.js --benchmark`: JS performance tests
 4. `$(npm bin)/protractor protractor-dart2js.conf.js --benchmark`: dart2js performance tests
 
 Angular specific command line options when running protractor (e.g. force gc, ...):
 `$(npm bin)/protractor protractor-{js|dart2js}-conf.js --ng-help`
+
+## Formatting with <a name="clang-format">clang-format</a>
+
+We use [clang-format](http://clang.llvm.org/docs/ClangFormat.html) to automatically enforce code
+style for our TypeScript code. This allows us to focus our code reviews more on the content, and
+less on style nit-picking. It also lets us encode our style guide in the `.clang-format` file in the
+repository, allowing many tools and editors to share our settings.
+
+To check the formatting of your code, run
+
+    gulp check-format
+
+Note that the continuous build on Travis runs `gulp enforce-format`. Unlike the `check-format` task,
+this will actually fail the build if files aren't formatted according to the style guide.
+
+Your life will be easier if you include the formatter in your standard workflow. Otherwise, you'll
+likely forget to check the formatting, and waste time waiting for a build on Travis that fails due
+to some whitespace difference.
+
+* Install clang-format with `npm install -g clang-format`.
+* Use `clang-format -i [file name]` to format a file (or multiple).
+  Note that `clang-format` tries to load a `clang-format` node module close to the sources being
+  formatted, or from the `$CWD`, and only then uses the globally installed one - so the version used
+  should automatically match the one required by the project.
+  Use `clang-format -version` in case you get confused.
+* Use `gulp enforce-format` to check if your code is `clang-format` clean. This also gives
+  you a command line to format your code.
+* `clang-format` also includes a git hook, run `git clang-format` to format all files you
+  touched.
+* You can run this as a **git pre-commit hook** to automatically format your delta regions when you
+  commit a change. In the angular repo, run
+
+```
+    $ echo -e '#!/bin/sh\nexec git clang-format' > .git/hooks/pre-commit
+    $ chmod u+x !$
+```
+
+* **WebStorm** can run clang-format on the current file.
+  1. Under Preferences, open Tools > External Tools.
+  1. Plus icon to Create Tool
+  1. Fill in the form:
+    - Name: clang-format
+    - Description: Format
+    - Synchronize files after execution: checked
+    - Open console: not checked
+    - Show in: Editor menu
+    - Program: [path to clang-format, try `$ echo $(npm config get prefix)/bin/clang-format`]
+    - Parameters: `-i -style=file $FilePath$`
+    - Working directory: `$ProjectFileDir$`
+* `clang-format` integrations are also available for many popular editors (`vim`, `emacs`,
+  `Sublime Text`, etc.).
 
 ## Project Information
 
@@ -205,9 +266,7 @@ Angular specific command line options when running protractor (e.g. force gc, ..
 
 ### File suffixes
 
-* `*.js`: JavaScript files that get transpiled to Dart and EcmaScript 5
-* `*.es6`: JavaScript files that get transpiled only to EcmaScript 5
-* `*.es5`: JavaScript files that don't get transpiled
+* `*.ts`: TypeScript files that get transpiled to Dart and EcmaScript 5/6
 * `*.dart`: Dart files that don't get transpiled
 
 ## CI using Travis
