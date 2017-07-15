@@ -1,10 +1,18 @@
-"use strict";
+/**
+ * @license
+ * Copyright Google Inc. All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
+'use strict';
 
 var fs = require('fs');
 var path = require('path');
 
 var NPM_SHRINKWRAP_FILE = 'npm-shrinkwrap.json';
-var NPM_SHRINKWRAP_CACHED_FILE = 'node_modules/npm-shrinkwrap.cached.json';
+var NPM_SHRINKWRAP_CACHED_FILE = 'node_modules/.npm-shrinkwrap.cached.json';
 var FS_OPTS = {encoding: 'utf-8'};
 var PROJECT_ROOT = path.join(__dirname, '../../');
 
@@ -18,12 +26,7 @@ function checkNodeModules(logOutput, purgeIfStale) {
     if (logOutput) console.error(':-( npm dependencies are stale or in an in unknown state!');
     if (purgeIfStale) {
       if (logOutput) console.log('    purging...');
-
-      var nodeModulesPath = path.join(PROJECT_ROOT, 'node_modules');
-
-      if (fs.existsSync(nodeModulesPath)) {
-        _deleteDir(nodeModulesPath);
-      }
+      _deleteDir(path.join(PROJECT_ROOT, 'node_modules'));
     }
   }
 
@@ -50,11 +53,11 @@ function _checkCache(markerFile, cacheMarkerFile) {
  * pull in existing module.
  */
 function _deleteDir(path) {
-  if( fs.existsSync(path) ) {
+  if (fs.existsSync(path)) {
     var subpaths = fs.readdirSync(path);
     subpaths.forEach(function(subpath) {
-      var curPath = path + "/" + subpath;
-      if(fs.lstatSync(curPath).isDirectory()) {
+      var curPath = path + '/' + subpath;
+      if (fs.lstatSync(curPath).isDirectory()) {
         _deleteDir(curPath);
       } else {
         fs.unlinkSync(curPath);

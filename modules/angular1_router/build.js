@@ -1,100 +1,70 @@
+/**
+ * @license
+ * Copyright Google Inc. All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
 'use strict';
 
 var fs = require('fs');
 var ts = require('typescript');
 
 var files = [
-  'lifecycle_annotations_impl.ts',
+  'utils.ts',
   'url_parser.ts',
-  'path_recognizer.ts',
-  'route_config_impl.ts',
-  'async_route_handler.ts',
-  'sync_route_handler.ts',
-  'route_recognizer.ts',
+  'lifecycle/lifecycle_annotations_impl.ts',
+  'lifecycle/route_lifecycle_reflector.ts',
+  'route_config/route_config_impl.ts',
+  'route_config/route_config_normalizer.ts',
+  'rules/route_handlers/async_route_handler.ts',
+  'rules/route_handlers/sync_route_handler.ts',
+  'rules/rules.ts',
+  'rules/rule_set.ts',
+  'rules/route_paths/route_path.ts',
+  'rules/route_paths/param_route_path.ts',
+  'rules/route_paths/regex_route_path.ts',
   'instruction.ts',
-  'route_config_nomalizer.ts',
-  'route_lifecycle_reflector.ts',
   'route_registry.ts',
   'router.ts'
 ];
 
 var PRELUDE = '(function(){\n';
 var POSTLUDE = '\n}());\n';
-var FACADES = fs.readFileSync(__dirname + '/lib/facades.es5', 'utf8');
-var TRACEUR_RUNTIME = fs.readFileSync(__dirname + '/../../node_modules/traceur/bin/traceur-runtime.js', 'utf8');
-var DIRECTIVES = fs.readFileSync(__dirname + '/src/ng_outlet.js', 'utf8');
-function main() {
-  var dir = __dirname + '/../angular2/src/router/';
 
-  var out = '';
+function main(modulesDirectory) {
+  var angular1RouterModuleDirectory = modulesDirectory + '/angular1_router';
 
-  var sharedCode = '';
-  files.forEach(function (file) {
-    var moduleName = 'router/' + file.replace(/\.ts$/, '');
+  var facades = fs.readFileSync(
+      angular1RouterModuleDirectory + '/lib/facades.es5', 'utf8');
+  var directives = fs.readFileSync(
+      angular1RouterModuleDirectory + '/src/ng_outlet.ts', 'utf8');
+  var moduleTemplate = fs.readFileSync(
+      angular1RouterModuleDirectory + '/src/module_template.js', 'utf8');
 
-    sharedCode += transform(moduleName, fs.readFileSync(dir + file, 'utf8'));
-  });
+  var dir = modulesDirectory + '/angular2/src/router/';
+  var sharedCode = files.reduce(function (prev, file) {
+    return prev + transform(fs.readFileSync(dir + file, 'utf8'));
+  }, '');
 
-  out += "angular.module('ngComponentRouter')";
-  out += angularFactory('$router', ['$q', '$location', '$$controllerIntrospector',
-                                    '$browser', '$rootScope', '$injector'], [
-    FACADES,
-    "var exports = {Injectable: function () {}};",
-    "var require = function () {return exports;};",
-    sharedCode,
-    "var RouteConfig = exports.RouteConfig;",
-    "angular.annotations = {RouteConfig: RouteConfig, CanActivate: exports.CanActivate};",
-    "angular.stringifyInstruction = exports.stringifyInstruction;",
-    "var RouteRegistry = exports.RouteRegistry;",
-    "var RootRouter = exports.RootRouter;",
-    //TODO: move this code into a templated JS file
-    "var registry = new RouteRegistry();",
-    "var location = new Location();",
-
-    "$$controllerIntrospector(function (name, constructor) {",
-      "if (constructor.$canActivate) {",
-        "constructor.annotations = constructor.annotations || [];",
-        "constructor.annotations.push(new angular.annotations.CanActivate(function (instruction) {",
-          "return $injector.invoke(constructor.$canActivate, constructor, {",
-            "$routeParams: instruction.component ? instruction.component.params : instruction.params",
-          "});",
-        "}));",
-      "}",
-      "if (constructor.$routeConfig) {",
-        "constructor.annotations = constructor.annotations || [];",
-        "constructor.annotations.push(new angular.annotations.RouteConfig(constructor.$routeConfig));",
-      "}",
-      "if (constructor.annotations) {",
-        "constructor.annotations.forEach(function(annotation) {",
-          "if (annotation instanceof RouteConfig) {",
-            "annotation.configs.forEach(function (config) {",
-              "registry.config(constructor, config);",
-            "});",
-          "}",
-        "});",
-      "}",
-    "});",
-
-    "var router = new RootRouter(registry, undefined, location, new Object());",
-    "$rootScope.$watch(function () { return $location.path(); }, function (path) {",
-      "if (router.lastNavigationAttempt !== path) {",
-        "router.navigate(path);",
-      "}",
-    "});",
-
-    "return router;"
-  ].join('\n'));
-
-  return PRELUDE + TRACEUR_RUNTIME + DIRECTIVES + out + POSTLUDE;
+  // we have to use a function callback for replace to prevent it from interpreting `$`
+  // as a replacement command character
+  var out = moduleTemplate.replace('//{{FACADES}}', function() { return facades; })
+                .replace('//{{SHARED_CODE}}', function() { return sharedCode; });
+  return PRELUDE + transform(directives) + out + POSTLUDE;
 }
-
 
 /*
  * Given a directory name and a file's TypeScript content, return an object with the ES5 code,
- * sourcemap, anf exported variable identifier name for the content.
+ * sourcemap, and exported variable identifier name for the content.
  */
 var IMPORT_RE = new RegExp("import \\{?([\\w\\n_, ]+)\\}? from '(.+)';?", 'g');
-function transform(dir, contents) {
+var INJECT_RE = new RegExp("@Inject\\(ROUTER_PRIMARY_COMPONENT\\)", 'g');
+var INJECTABLE_RE = new RegExp("@Injectable\\(\\)", 'g');
+var REQUIRE_RE = new RegExp("require\\('(.*?)'\\);", 'g');
+function transform(contents) {
+  contents = contents.replace(INJECT_RE, '').replace(INJECTABLE_RE, '');
   contents = contents.replace(IMPORT_RE, function (match, imports, includePath) {
     //TODO: remove special-case
     if (isFacadeModule(includePath) || includePath === './router_outlet') {
@@ -102,32 +72,45 @@ function transform(dir, contents) {
     }
     return match;
   });
-  return ts.transpile(contents, {
+  contents = ts.transpile(contents, {
     target: ts.ScriptTarget.ES5,
-    module: ts.ModuleKind.CommonJS,
-    sourceRoot: dir
+    module: ts.ModuleKind.CommonJS
   });
+
+  // Rename require functions from transpiled imports
+  contents = contents.replace(REQUIRE_RE, 'routerRequire(\'$1\');');
+
+  return contents;
 }
-
-
-function angularFactory(name, deps, body) {
-  return ".factory('" + name + "', [" +
-    deps.map(function (service) {
-      return "'" + service + "', ";
-    }).join('') +
-    "function (" + deps.join(', ') + ") {\n" + body + "\n}])";
-}
-
 
 function isFacadeModule(modulePath) {
   return modulePath.indexOf('facade') > -1 ||
     modulePath === 'angular2/src/core/reflection/reflection';
 }
 
-module.exports = function () {
-  var dist = __dirname + '/../../dist';
-  if (!fs.existsSync(dist)) {
-    fs.mkdirSync(dist);
+module.exports = function(modulesDirectory, outputDirectory) {
+  if (!fs.existsSync(outputDirectory)) {
+    fs.mkdirSync(outputDirectory);
   }
-  fs.writeFileSync(dist + '/angular_1_router.js', main(files));
+  fs.writeFileSync(
+      outputDirectory + '/angular_1_router.js', main(modulesDirectory));
 };
+
+// CLI entry point
+if (require.main === module) {
+  try {
+    var args = process.argv;
+    args.shift();  // node
+    args.shift();  // scriptfile.js
+    if (args.length < 2) {
+      console.log("usage: $0 outFile path/to/modules");
+      process.exit(1);
+    }
+    var outfile = args.shift();
+    var directory = args.shift();
+    fs.writeFileSync(outfile, main(directory));
+  } catch (e) {
+    console.log(e.message);
+    process.exit(1);
+  }
+}

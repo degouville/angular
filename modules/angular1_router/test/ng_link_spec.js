@@ -1,189 +1,212 @@
+/**
+ * @license
+ * Copyright Google Inc. All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
 'use strict';
 
-describe('ngOutlet', function () {
+describe('ngLink', function () {
 
-  var elt,
-      $compile,
-      $rootScope,
-      $router,
-      $templateCache,
-      $controllerProvider;
+  describe('html5Mode enabled', function () {
+    runHrefTestsAndExpectPrefix('/', true);
+  });
 
-  var OneController, TwoController, UserController;
+  describe('html5Mode disabled', function () {
+    runHrefTestsAndExpectPrefix('', false, '');
+  });
 
-  beforeEach(function () {
-    module('ng');
-    module('ngComponentRouter');
-    module(function (_$controllerProvider_) {
-      $controllerProvider = _$controllerProvider_;
+  describe('html5Mode disabled, with hash prefix', function () {
+    runHrefTestsAndExpectPrefix('', false, '!');
+  });
+
+  describe('html5Mode enabled', function () {
+    runHrefTestsAndExpectPrefix('/moo', true);
+  });
+
+  describe('html5Mode disabled', function () {
+    runHrefTestsAndExpectPrefix('/moo', false, '');
+  });
+
+  describe('html5Mode disabled, with hash prefix', function () {
+    runHrefTestsAndExpectPrefix('/moo', false, '!');
+  });
+
+  function runHrefTestsAndExpectPrefix(baseHref, html5Mode, hashPrefix) {
+    var prefix = html5Mode ? '.' : '#' + hashPrefix;
+
+    it('should allow linking from the parent to the child', function () {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      configureRouter([
+        { path: '/a', component: 'oneCmp' },
+        { path: '/b', component: 'twoCmp', name: 'Two' }
+      ]);
+
+      var elt = compile('<a ng-link="[\'/Two\']">link</a> | outer { <div ng-outlet></div> }');
+      navigateTo('/a');
+      expect(elt.find('a').attr('href')).toBe(prefix + '/b');
     });
 
-    inject(function (_$compile_, _$rootScope_, _$router_, _$templateCache_) {
-      $compile = _$compile_;
-      $rootScope = _$rootScope_;
-      $router = _$router_;
-      $templateCache = _$templateCache_;
+    it('should allow linking from the child and the parent', function () {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      configureRouter([
+        { path: '/a', component: 'oneCmp' },
+        { path: '/b', component: 'twoCmp', name: 'Two' }
+      ]);
+
+      var elt = compile('outer { <div ng-outlet></div> }');
+      navigateTo('/b');
+      expect(elt.find('a').attr('href')).toBe(prefix + '/b');
     });
 
-    UserController = registerComponent('user', '<div>hello {{user.name}}</div>', function ($routeParams) {
-      this.name = $routeParams.name;
+
+    it('should allow params in routerLink directive', function () {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      registerComponent('twoLinkCmp', '<div><a ng-link="[\'/Two\', {param: \'lol\'}]">{{twoLinkCmp.number}}</a></div>', function () {this.number = 'two'});
+      configureRouter([
+        { path: '/a', component: 'twoLinkCmp' },
+        { path: '/b/:param', component: 'twoCmp', name: 'Two' }
+      ]);
+
+      var elt = compile('<div ng-outlet></div>');
+      navigateTo('/a');
+      expect(elt.find('a').attr('href')).toBe(prefix + '/b/lol');
     });
-    OneController = registerComponent('one', '<div>{{one.number}}</div>', boringController('number', 'one'));
-    TwoController = registerComponent('two', '<div>{{two.number}}</div>', boringController('number', 'two'));
-  });
 
 
-  it('should allow linking from the parent to the child', function () {
-    put('one', '<div>{{number}}</div>');
+    it('should update the href of links with bound params', function () {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      registerComponent('twoLinkCmp', '<div><a ng-link="[\'/Two\', {param: $ctrl.number}]">{{$ctrl.number}}</a></div>', function () {this.number = 43});
+      configureRouter([
+        { path: '/a', component: 'twoLinkCmp' },
+        { path: '/b/:param', component: 'twoCmp', name: 'Two' }
+      ]);
 
-    $router.config([
-      { path: '/a', component: OneController },
-      { path: '/b', component: TwoController, as: 'two' }
-    ]);
-    compile('<a ng-link="[\'/two\']">link</a> | outer { <div ng-outlet></div> }');
-
-    $router.navigate('/a');
-    $rootScope.$digest();
-
-    expect(elt.find('a').attr('href')).toBe('./b');
-  });
-
-  it('should allow linking from the child and the parent', function () {
-    put('one', '<div><a ng-link="[\'/two\']">{{number}}</a></div>');
-
-    $router.config([
-      { path: '/a', component: OneController },
-      { path: '/b', component: TwoController, as: 'two' }
-    ]);
-    compile('outer { <div ng-outlet></div> }');
-
-    $router.navigate('/a');
-    $rootScope.$digest();
-
-    expect(elt.find('a').attr('href')).toBe('./b');
-  });
+      var elt = compile('<div ng-outlet></div>');
+      navigateTo('/a');
+      expect(elt.find('a').text()).toBe('43');
+      expect(elt.find('a').attr('href')).toBe(prefix + '/b/43');
+    });
 
 
-  it('should allow params in routerLink directive', function () {
-    put('router', '<div>outer { <div ng-outlet></div> }</div>');
-    put('one', '<div><a ng-link="[\'/two\', {param: \'lol\'}]">{{number}}</a></div>');
+    it('should navigate on left-mouse click when a link url matches a route', function () {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      configureRouter([
+        { path: '/', component: 'oneCmp' },
+        { path: '/two', component: 'twoCmp', name: 'Two'}
+      ]);
 
-    $router.config([
-      { path: '/a', component: OneController },
-      { path: '/b/:param', component: TwoController, as: 'two' }
-    ]);
-    compile('<div ng-outlet></div>');
+      var elt = compile('<a ng-link="[\'/Two\']">link</a> | <div ng-outlet></div>');
+      expect(elt.text()).toBe('link | one');
+      expect(elt.find('a').attr('href')).toBe(prefix + '/two');
 
-    $router.navigate('/a');
-    $rootScope.$digest();
-
-    expect(elt.find('a').attr('href')).toBe('./b/lol');
-  });
-
-  // TODO: test dynamic links
-  it('should update the href of links with bound params', function () {
-    put('router', '<div>outer { <div ng-outlet></div> }</div>');
-    put('one', '<div><a ng-link="[\'/two\', {param: one.number}]">{{one.number}}</a></div>');
-
-    $router.config([
-      { path: '/a', component: OneController },
-      { path: '/b/:param', component: TwoController, as: 'two' }
-    ]);
-    compile('<div ng-outlet></div>');
-
-    $router.navigate('/a');
-    $rootScope.$digest();
-
-    expect(elt.find('a').attr('href')).toBe('./b/one');
-  });
-
-
-  it('should navigate on left-mouse click when a link url matches a route', function () {
-    $router.config([
-      { path: '/', component: OneController },
-      { path: '/two', component: TwoController }
-    ]);
-
-    compile('<a href="/two">link</a> | <div ng-outlet></div>');
-    $rootScope.$digest();
-    expect(elt.text()).toBe('link | one');
-    elt.find('a')[0].click();
-
-    $rootScope.$digest();
-    expect(elt.text()).toBe('link | two');
-  });
-
-
-  it('should not navigate on non-left mouse click when a link url matches a route', inject(function ($router) {
-    $router.config([
-      { path: '/', component: OneController },
-      { path: '/two', component: TwoController }
-    ]);
-
-    compile('<a href="./two">link</a> | <div ng-outlet></div>');
-    $rootScope.$digest();
-    expect(elt.text()).toBe('link | one');
-    elt.find('a').triggerHandler({ type: 'click', which: 3 });
-
-    $rootScope.$digest();
-    expect(elt.text()).toBe('link | one');
-  }));
-
-
-  // See https://github.com/angular/router/issues/206
-  it('should not navigate a link without an href', function () {
-    $router.config([
-      { path: '/', component: OneController },
-      { path: '/two', component: TwoController }
-    ]);
-    expect(function () {
-      compile('<a>link</a>');
-      $rootScope.$digest();
-      expect(elt.text()).toBe('link');
       elt.find('a')[0].click();
-      $rootScope.$digest();
-    }).not.toThrow();
-  });
+      inject(function($rootScope) { $rootScope.$digest(); });
+      expect(elt.text()).toBe('link | two');
+    });
 
 
-  function registerComponent(name, template, config) {
-    var Ctrl;
-    if (!template) {
-      template = '';
-    }
-    if (!config) {
-      Ctrl = function () {};
-    } else if (angular.isArray(config)) {
-      Ctrl = function () {};
-      Ctrl.annotations = [new angular.annotations.RouteConfig(config)];
-    } else if (typeof config === 'function') {
-      Ctrl = config;
-    } else {
-      Ctrl = function () {};
-      if (config.canActivate) {
-        Ctrl.$canActivate = config.canActivate;
-        delete config.canActivate;
-      }
-      Ctrl.prototype = config;
-    }
-    $controllerProvider.register(componentControllerName(name), Ctrl);
-    put(name, template);
-    return Ctrl;
+    it('should not navigate on non-left mouse click when a link url matches a route', function() {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      configureRouter([
+        { path: '/', component: 'oneCmp' },
+        { path: '/two', component: 'twoCmp', name: 'Two'}
+      ]);
+
+      var elt = compile('<a ng-link="[\'/Two\']">link</a> | <div ng-outlet></div>');
+      expect(elt.text()).toBe('link | one');
+      elt.find('a').triggerHandler({ type: 'click', which: 3 });
+      inject(function($rootScope) { $rootScope.$digest(); });
+      expect(elt.text()).toBe('link | one');
+    });
+
+
+    // See https://github.com/angular/router/issues/206
+    it('should not navigate a link without an href', function () {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      configureRouter([
+        { path: '/', component: 'oneCmp' },
+        { path: '/two', component: 'twoCmp', name: 'Two'}
+      ]);
+      expect(function () {
+        var elt = compile('<a>link</a>');
+        expect(elt.text()).toBe('link');
+        elt.find('a')[0].click();
+        inject(function($rootScope) { $rootScope.$digest(); });
+      }).not.toThrow();
+    });
+
+    it('should add an ng-link-active class on the current link', function() {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      configureRouter([
+        { path: '/', component: 'oneCmp', name: 'One' }
+      ]);
+
+      var elt = compile('<a ng-link="[\'/One\']">one</a> | <div ng-outlet></div>');
+      navigateTo('/');
+      expect(elt.find('a').attr('class')).toBe('ng-link-active');
+    });
+
+    it('should not add a href if link attributes are undefined', function () {
+      setup({baseHref: baseHref, html5Mode: html5Mode, hashPrefix: hashPrefix});
+      configureRouter([
+        { path: '/a', component: 'oneCmp' },
+        { path: '/b', component: 'twoCmp', name: 'Two' }
+      ]);
+
+      var elt = compile('<a ng-link="something.undefined">link</a> | outer { <div ng-outlet></div> }');
+      navigateTo('/a');
+      expect(elt.find('a').hasAttr('href')).toBeFalsy();
+    });
   }
 
-  function boringController(model, value) {
-    return function () {
-      this[model] = value;
-    };
+  function registerComponent(name, template, controller) {
+    module(function($compileProvider) {
+      $compileProvider.component(name, {
+        template: template,
+        controller: controller
+      });
+    });
   }
 
-  function put(name, template) {
-    $templateCache.put(componentTemplatePath(name), [200, template, {}]);
+  function setup(config) {
+    module(function($provide) {
+      $provide.decorator('$browser', function($delegate) {
+        $delegate.baseHref = function() { return config.baseHref; };
+        return $delegate;
+      });
+    });
+    module('ngComponentRouter');
+    module(function($locationProvider) {
+      $locationProvider.html5Mode(config.html5Mode);
+      $locationProvider.hashPrefix(config.hashPrefix);
+    });
+    registerComponent('userCmp', '<div>hello {{$ctrl.$routeParams.name}}</div>', function () {});
+    registerComponent('oneCmp', '<div>{{$ctrl.number}}</div>', function () {this.number = 'one'});
+    registerComponent('twoCmp', '<div><a ng-link="[\'/Two\']">{{$ctrl.number}}</a></div>', function () {this.number = 'two'});
+  }
+
+  function configureRouter(routeConfig) {
+    inject(function($rootRouter) {
+      $rootRouter.config(routeConfig);
+    });
   }
 
   function compile(template) {
-    elt = $compile('<div>' + template + '</div>')($rootScope);
-    $rootScope.$digest();
+    var elt;
+    inject(function($compile, $rootScope) {
+      elt = $compile('<div>' + template + '</div>')($rootScope);
+      $rootScope.$digest();
+    });
     return elt;
+  }
+
+  function navigateTo(url) {
+    inject(function($rootRouter, $rootScope) {
+      $rootRouter.navigateByUrl(url);
+      $rootScope.$digest();
+    });
   }
 });

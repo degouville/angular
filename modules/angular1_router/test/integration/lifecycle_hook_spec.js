@@ -1,57 +1,59 @@
+/**
+ * @license
+ * Copyright Google Inc. All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
 'use strict';
 
-describe('ngOutlet', function () {
-
+describe('Navigation lifecycle', function () {
   var elt,
-      $compile,
-      $rootScope,
-      $router,
-      $templateCache,
-      $controllerProvider,
-      $componentMapperProvider;
-
-  var OneController, TwoController, UserController;
-
-  function instructionFor(componentType) {
-    return jasmine.objectContaining({componentType: componentType});
-  }
-
+    $compile,
+    $q,
+    $rootScope,
+    $rootRouter,
+    $compileProvider;
 
   beforeEach(function () {
     module('ng');
     module('ngComponentRouter');
-    module(function (_$controllerProvider_, _$componentMapperProvider_) {
-      $controllerProvider = _$controllerProvider_;
-      $componentMapperProvider = _$componentMapperProvider_;
+    module(function (_$compileProvider_) {
+      $compileProvider = _$compileProvider_;
     });
 
-    inject(function (_$compile_, _$rootScope_, _$router_, _$templateCache_) {
+    inject(function (_$compile_, _$q_, _$rootScope_, _$rootRouter_) {
       $compile = _$compile_;
+      $q = _$q_;
       $rootScope = _$rootScope_;
-      $router = _$router_;
-      $templateCache = _$templateCache_;
+      $rootRouter = _$rootRouter_;
     });
 
-    UserController = registerComponent('user', '<div>hello {{user.name}}</div>', function ($routeParams) {
-      this.name = $routeParams.name;
+    registerComponent('oneCmp', {
+      template: '<div>{{oneCmp.number}}</div>',
+      controller: function () {this.number = 'one'}
     });
-    OneController = registerComponent('one', '<div>{{one.number}}</div>', boringController('number', 'one'));
-    TwoController = registerComponent('two', '<div>{{two.number}}</div>', boringController('number', 'two'));
+    registerComponent('twoCmp', {
+      template: '<div><a ng-link="[\'/Two\']">{{twoCmp.number}}</a></div>',
+      controller: function () {this.number = 'two'}
+    });
   });
 
 
   it('should run the activate hook of controllers', function () {
     var spy = jasmine.createSpy('activate');
-    var activate = registerComponent('activate', '', {
-      onActivate: spy
+    registerComponent('activateCmp', {
+      template: '<p>hello</p>',
+      $routerOnActivate: spy
     });
 
-    $router.config([
-      { path: '/a', component: activate }
+    $rootRouter.config([
+      { path: '/a', component: 'activateCmp' }
     ]);
     compile('<div>outer { <div ng-outlet></div> }</div>');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
 
     expect(spy).toHaveBeenCalled();
@@ -60,55 +62,98 @@ describe('ngOutlet', function () {
 
   it('should pass instruction into the activate hook of a controller', function () {
     var spy = jasmine.createSpy('activate');
-    var UserController = registerComponent('user', '', {
-      onActivate: spy
+    registerComponent('userCmp', {
+      $routerOnActivate: spy
     });
 
-    $router.config([
-      { path: '/user/:name', component: UserController }
+    $rootRouter.config([
+      { path: '/user/:name', component: 'userCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/user/brian');
+    $rootRouter.navigateByUrl('/user/brian');
     $rootScope.$digest();
 
-    expect(spy).toHaveBeenCalledWith(instructionFor(UserController), undefined);
+    expect(spy).toHaveBeenCalledWith(instructionFor('userCmp'), undefined);
   });
 
 
   it('should pass previous instruction into the activate hook of a controller', function () {
     var spy = jasmine.createSpy('activate');
-    var activate = registerComponent('activate', '', {
-      onActivate: spy
+    var activate = registerComponent('activateCmp', {
+      template: 'hi',
+      $routerOnActivate: spy
     });
 
-    $router.config([
-      { path: '/user/:name', component: OneController },
-      { path: '/post/:id', component: activate }
+    $rootRouter.config([
+      { path: '/user/:name', component: 'oneCmp' },
+      { path: '/post/:id', component: 'activateCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/user/brian');
+    $rootRouter.navigateByUrl('/user/brian');
     $rootScope.$digest();
-    $router.navigate('/post/123');
+    $rootRouter.navigateByUrl('/post/123');
     $rootScope.$digest();
-    expect(spy).toHaveBeenCalledWith(instructionFor(activate),
-                                     instructionFor(OneController));
+    expect(spy).toHaveBeenCalledWith(instructionFor('activateCmp'),
+                                     instructionFor('oneCmp'));
+  });
+
+  describe('activate hook with promise', () => {
+    var activateDeferred;
+    beforeEach(() => {
+      activateDeferred = $q.defer();
+      var activate = registerComponent('activateCmp', {
+        template: 'hi',
+        $routerOnActivate: function() {
+          return activateDeferred.promise;
+        }
+      });
+
+      $rootRouter.config([
+        { path: '/user/:name', component: 'oneCmp' },
+        { path: '/post', component: 'activateCmp' },
+      ]);
+      compile('<div ng-outlet></div>');
+
+      $rootRouter.navigateByUrl('/user/fabian');
+      $rootScope.$digest();
+      $rootRouter.navigateByUrl('/post');
+      $rootScope.$digest();
+    });
+
+    it('should update the view once the promise gets resolved', () => {
+      expect(elt.text()).toBe('one');
+
+      activateDeferred.resolve();
+      $rootScope.$digest();
+      expect(elt.text()).toBe('hi');
+    });
+
+    it('should update the view once the promise gets rejected', () => {
+      expect(elt.text()).toBe('one');
+
+      activateDeferred.reject();
+      $rootScope.$digest();
+      expect(elt.text()).toBe('hi');
+    });
   });
 
   it('should inject $scope into the controller constructor', function () {
-
     var injectedScope;
-    var UserController = registerComponent('user', '', function ($scope) {
-      injectedScope = $scope;
+    registerComponent('userCmp', {
+      template: '',
+      controller: function ($scope) {
+        injectedScope = $scope;
+      }
     });
 
-    $router.config([
-      { path: '/user', component: UserController }
+    $rootRouter.config([
+      { path: '/user', component: 'userCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/user');
+    $rootRouter.navigateByUrl('/user');
     $rootScope.$digest();
 
     expect(injectedScope).toBeDefined();
@@ -117,19 +162,19 @@ describe('ngOutlet', function () {
 
   it('should run the deactivate hook of controllers', function () {
     var spy = jasmine.createSpy('deactivate');
-    var deactivate = registerComponent('deactivate', '', {
-      onDeactivate: spy
+    registerComponent('deactivateCmp', {
+      $routerOnDeactivate: spy
     });
 
-    $router.config([
-      { path: '/a', component: deactivate },
-      { path: '/b', component: OneController }
+    $rootRouter.config([
+      { path: '/a', component: 'deactivateCmp' },
+      { path: '/b', component: 'oneCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
-    $router.navigate('/b');
+    $rootRouter.navigateByUrl('/b');
     $rootScope.$digest();
     expect(spy).toHaveBeenCalled();
   });
@@ -137,83 +182,90 @@ describe('ngOutlet', function () {
 
   it('should pass instructions into the deactivate hook of controllers', function () {
     var spy = jasmine.createSpy('deactivate');
-    var deactivate = registerComponent('deactivate', '', {
-      onDeactivate: spy
+    registerComponent('deactivateCmp', {
+      $routerOnDeactivate: spy
     });
 
-    $router.config([
-      { path: '/user/:name', component: deactivate },
-      { path: '/post/:id', component: OneController }
+    $rootRouter.config([
+      { path: '/user/:name', component: 'deactivateCmp' },
+      { path: '/post/:id', component: 'oneCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/user/brian');
+    $rootRouter.navigateByUrl('/user/brian');
     $rootScope.$digest();
-    $router.navigate('/post/123');
+    $rootRouter.navigateByUrl('/post/123');
     $rootScope.$digest();
-    expect(spy).toHaveBeenCalledWith(instructionFor(OneController),
-                                     instructionFor(deactivate));
+    expect(spy).toHaveBeenCalledWith(instructionFor('oneCmp'),
+                                     instructionFor('deactivateCmp'));
   });
 
 
   it('should run the deactivate hook before the activate hook', function () {
     var log = [];
 
-    var activate = registerComponent('activate', '', {
-      onActivate: function () {
+    registerComponent('activateCmp', {
+      $routerOnActivate: function () {
         log.push('activate');
       }
     });
 
-    var deactivate = registerComponent('deactivate', '', {
-      onDeactivate: function () {
+    registerComponent('deactivateCmp', {
+      $routerOnDeactivate: function () {
         log.push('deactivate');
       }
     });
 
-    $router.config([
-      { path: '/a', component: deactivate },
-      { path: '/b', component: activate }
+    $rootRouter.config([
+      { path: '/a', component: 'deactivateCmp' },
+      { path: '/b', component: 'activateCmp' }
     ]);
     compile('outer { <div ng-outlet></div> }');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
-    $router.navigate('/b');
+    $rootRouter.navigateByUrl('/b');
     $rootScope.$digest();
 
     expect(log).toEqual(['deactivate', 'activate']);
   });
 
-
-  it('should reuse a component when the canReuse hook returns true', function () {
+  it('should reuse a component when the routerCanReuse hook returns true', function () {
     var log = [];
     var cmpInstanceCount = 0;
 
     function ReuseCmp() {
       cmpInstanceCount++;
-      this.canReuse = function () {
-        return true;
-      };
-      this.onReuse = function (next, prev) {
-        log.push('reuse: ' + prev.urlPath + ' -> ' + next.urlPath);
-      };
     }
-    ReuseCmp.$routeConfig = [{path: '/a', component: OneController}, {path: '/b', component: TwoController}];
-    registerComponent('reuse', 'reuse {<ng-outlet></ng-outlet>}', ReuseCmp);
 
-    $router.config([
-      { path: '/on-reuse/:number/...', component: ReuseCmp }
+    registerComponent('reuseCmp', {
+      template: 'reuse {<ng-outlet></ng-outlet>}',
+      $routeConfig: [
+        {path: '/a', component: 'oneCmp'},
+        {path: '/b', component: 'twoCmp'}
+      ],
+      controller: ReuseCmp,
+      $routerCanReuse: function () {
+        return true;
+      },
+      $routerOnReuse: function (next, prev) {
+        log.push('reuse: ' + prev.urlPath + ' -> ' + next.urlPath);
+      }
+    });
+
+    $rootRouter.config([
+      { path: '/on-reuse/:number/...', component: 'reuseCmp' },
+      { path: '/two', component: 'twoCmp', name: 'Two'}
     ]);
     compile('outer { <div ng-outlet></div> }');
 
-    $router.navigate('/on-reuse/1/a');
+    $rootRouter.navigateByUrl('/on-reuse/1/a');
     $rootScope.$digest();
     expect(log).toEqual([]);
     expect(cmpInstanceCount).toBe(1);
     expect(elt.text()).toBe('outer { reuse {one} }');
 
-    $router.navigate('/on-reuse/2/b');
+    $rootRouter.navigateByUrl('/on-reuse/2/b');
     $rootScope.$digest();
     expect(log).toEqual(['reuse: on-reuse/1 -> on-reuse/2']);
     expect(cmpInstanceCount).toBe(1);
@@ -221,34 +273,41 @@ describe('ngOutlet', function () {
   });
 
 
-  it('should not reuse a component when the canReuse hook returns false', function () {
+  it('should not reuse a component when the routerCanReuse hook returns false', function () {
     var log = [];
     var cmpInstanceCount = 0;
 
     function NeverReuseCmp() {
       cmpInstanceCount++;
-      this.canReuse = function () {
-        return false;
-      };
-      this.onReuse = function (next, prev) {
-        log.push('reuse: ' + prev.urlPath + ' -> ' + next.urlPath);
-      };
     }
-    NeverReuseCmp.$routeConfig = [{path: '/a', component: OneController}, {path: '/b', component: TwoController}];
-    registerComponent('reuse', 'reuse {<ng-outlet></ng-outlet>}', NeverReuseCmp);
+    registerComponent('reuseCmp', {
+      template: 'reuse {<ng-outlet></ng-outlet>}',
+      $routeConfig: [
+        {path: '/a', component: 'oneCmp'},
+        {path: '/b', component: 'twoCmp'}
+      ],
+      controller: NeverReuseCmp,
+      $routerCanReuse: function () {
+        return false;
+      },
+      $routerOnReuse: function (next, prev) {
+        log.push('reuse: ' + prev.urlPath + ' -> ' + next.urlPath);
+      }
+    });
 
-    $router.config([
-      { path: '/never-reuse/:number/...', component: NeverReuseCmp }
+    $rootRouter.config([
+      { path: '/never-reuse/:number/...', component: 'reuseCmp' },
+      { path: '/two', component: 'twoCmp', name: 'Two'}
     ]);
     compile('outer { <div ng-outlet></div> }');
 
-    $router.navigate('/never-reuse/1/a');
+    $rootRouter.navigateByUrl('/never-reuse/1/a');
     $rootScope.$digest();
     expect(log).toEqual([]);
     expect(cmpInstanceCount).toBe(1);
     expect(elt.text()).toBe('outer { reuse {one} }');
 
-    $router.navigate('/never-reuse/2/b');
+    $rootRouter.navigateByUrl('/never-reuse/2/b');
     $rootScope.$digest();
     expect(log).toEqual([]);
     expect(cmpInstanceCount).toBe(2);
@@ -256,21 +315,21 @@ describe('ngOutlet', function () {
   });
 
 
+  // TODO: need to solve getting ahold of canActivate hook
   it('should not activate a component when canActivate returns false', function () {
+    var canActivateSpy = jasmine.createSpy('canActivate').and.returnValue(false);
     var spy = jasmine.createSpy('activate');
-    var activate = registerComponent('activate', '', {
-      canActivate: function () {
-        return false;
-      },
-      onActivate: spy
+    registerComponent('activateCmp', {
+      $canActivate: canActivateSpy,
+      $routerOnActivate: spy
     });
 
-    $router.config([
-      { path: '/a', component: activate }
+    $rootRouter.config([
+      { path: '/a', component: 'activateCmp' }
     ]);
     compile('outer { <div ng-outlet></div> }');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
 
     expect(spy).not.toHaveBeenCalled();
@@ -279,42 +338,44 @@ describe('ngOutlet', function () {
 
 
   it('should activate a component when canActivate returns true', function () {
-    var spy = jasmine.createSpy('activate');
-    var activate = registerComponent('activate', 'hi', {
-      canActivate: function () {
-        return true;
-      },
-      onActivate: spy
+    var activateSpy = jasmine.createSpy('activate');
+    var canActivateSpy = jasmine.createSpy('canActivate').and.returnValue(true);
+    registerComponent('activateCmp', {
+      template: 'hi',
+      $canActivate: canActivateSpy,
+      $routerOnActivate: activateSpy
     });
 
-    $router.config([
-      { path: '/a', component: activate }
+    $rootRouter.config([
+      { path: '/a', component: 'activateCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
 
-    expect(spy).toHaveBeenCalled();
+    expect(canActivateSpy).toHaveBeenCalled();
+    expect(activateSpy).toHaveBeenCalled();
     expect(elt.text()).toBe('hi');
   });
 
 
   it('should activate a component when canActivate returns a resolved promise', inject(function ($q) {
     var spy = jasmine.createSpy('activate');
-    var activate = registerComponent('activate', 'hi', {
-      canActivate: function () {
+    registerComponent('activateCmp', {
+      template: 'hi',
+      $canActivate: function () {
         return $q.when(true);
       },
-      onActivate: spy
+      $routerOnActivate: spy
     });
 
-    $router.config([
-      { path: '/a', component: activate }
+    $rootRouter.config([
+      { path: '/a', component: 'activateCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
 
     expect(spy).toHaveBeenCalled();
@@ -324,64 +385,70 @@ describe('ngOutlet', function () {
 
   it('should inject into the canActivate hook of controllers', inject(function ($http) {
     var spy = jasmine.createSpy('canActivate').and.returnValue(true);
-    var activate = registerComponent('activate', '', {
-      canActivate: spy
+    registerComponent('activateCmp', {
+      $canActivate: spy
     });
 
-    spy.$inject = ['$routeParams', '$http'];
+    spy.$inject = ['$nextInstruction', '$http'];
 
-    $router.config([
-      { path: '/user/:name', component: activate }
+    $rootRouter.config([
+      { path: '/user/:name', component: 'activateCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/user/brian');
+    $rootRouter.navigateByUrl('/user/brian');
     $rootScope.$digest();
-    expect(spy).toHaveBeenCalledWith({name: 'brian'}, $http);
+
+    expect(spy).toHaveBeenCalled();
+    var args = spy.calls.mostRecent().args;
+    expect(args[0].params).toEqual(jasmine.objectContaining({name: 'brian'}));
+    expect(args[1]).toBe($http);
   }));
 
 
-  it('should not navigate when canDeactivate returns false', function () {
-    var activate = registerComponent('activate', 'hi', {
-      canDeactivate: function () {
+  it('should not navigate when routerCanDeactivate returns false', function () {
+    registerComponent('activateCmp', {
+      template: 'hi',
+      $routerCanDeactivate: function () {
         return false;
       }
     });
 
-    $router.config([
-      { path: '/a', component: activate },
-      { path: '/b', component: OneController }
+    $rootRouter.config([
+      { path: '/a', component: 'activateCmp' },
+      { path: '/b', component: 'oneCmp' }
     ]);
     compile('outer { <div ng-outlet></div> }');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
     expect(elt.text()).toBe('outer { hi }');
 
-    $router.navigate('/b');
+    $rootRouter.navigateByUrl('/b');
     $rootScope.$digest();
     expect(elt.text()).toBe('outer { hi }');
   });
 
 
-  it('should navigate when canDeactivate returns true', function () {
-    var activate = registerComponent('activate', 'hi', {
-      canDeactivate: function () {
+  it('should navigate when routerCanDeactivate returns true', function () {
+    registerComponent('activateCmp', {
+      template: 'hi',
+      $routerCanDeactivate: function () {
         return true;
       }
     });
 
-    $router.config([
-      { path: '/a', component: activate },
-      { path: '/b', component: OneController }
+    $rootRouter.config([
+      { path: '/a', component: 'activateCmp' },
+      { path: '/b', component: 'oneCmp' }
     ]);
     compile('outer { <div ng-outlet></div> }');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
     expect(elt.text()).toBe('outer { hi }');
 
-    $router.navigate('/b');
+    $rootRouter.navigateByUrl('/b');
     $rootScope.$digest();
     expect(elt.text()).toBe('outer { one }');
   });
@@ -389,19 +456,20 @@ describe('ngOutlet', function () {
 
   it('should activate a component when canActivate returns true', function () {
     var spy = jasmine.createSpy('activate');
-    var activate = registerComponent('activate', 'hi', {
-      canActivate: function () {
+    registerComponent('activateCmp', {
+      template: 'hi',
+      $canActivate: function () {
         return true;
       },
-      onActivate: spy
+      $routerOnActivate: spy
     });
 
-    $router.config([
-      { path: '/a', component: activate }
+    $rootRouter.config([
+      { path: '/a', component: 'activateCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/a');
+    $rootRouter.navigateByUrl('/a');
     $rootScope.$digest();
 
     expect(spy).toHaveBeenCalled();
@@ -409,64 +477,61 @@ describe('ngOutlet', function () {
   });
 
 
-  it('should pass instructions into the canDeactivate hook of controllers', function () {
-    var spy = jasmine.createSpy('canDeactivate').and.returnValue(true);
-    var deactivate = registerComponent('deactivate', '', {
-      canDeactivate: spy
+  it('should pass instructions into the routerCanDeactivate hook of controllers', function () {
+    var spy = jasmine.createSpy('routerCanDeactivate').and.returnValue(true);
+    registerComponent('deactivateCmp', {
+      $routerCanDeactivate: spy
     });
 
-    $router.config([
-      { path: '/user/:name', component: deactivate },
-      { path: '/post/:id', component: OneController }
+    $rootRouter.config([
+      { path: '/user/:name', component: 'deactivateCmp' },
+      { path: '/post/:id', component: 'oneCmp' }
     ]);
     compile('<div ng-outlet></div>');
 
-    $router.navigate('/user/brian');
+    $rootRouter.navigateByUrl('/user/brian');
     $rootScope.$digest();
-    $router.navigate('/post/123');
+    $rootRouter.navigateByUrl('/post/123');
     $rootScope.$digest();
-    expect(spy).toHaveBeenCalledWith(instructionFor(OneController),
-                                     instructionFor(deactivate));
+    expect(spy).toHaveBeenCalledWith(instructionFor('oneCmp'),
+                                     instructionFor('deactivateCmp'));
   });
 
-  function registerComponent(name, template, config) {
-    var Ctrl;
-    if (!template) {
-      template = '';
-    }
-    if (!config) {
-      Ctrl = function () {};
-    } else if (angular.isArray(config)) {
-      Ctrl = function () {};
-      Ctrl.annotations = [new angular.annotations.RouteConfig(config)];
-    } else if (typeof config === 'function') {
-      Ctrl = config;
-    } else {
-      Ctrl = function () {};
-      if (config.canActivate) {
-        Ctrl.$canActivate = config.canActivate;
-        delete config.canActivate;
+
+  function registerComponent(name, options) {
+    var controller = options.controller || function () {};
+
+    ['$routerOnActivate', '$routerOnDeactivate', '$routerOnReuse', '$routerCanReuse', '$routerCanDeactivate'].forEach(function (hookName) {
+      if (options[hookName]) {
+        controller.prototype[hookName] = options[hookName];
       }
-      Ctrl.prototype = config;
+    });
+
+    function factory() {
+      return {
+        template: options.template || '',
+        controllerAs: name,
+        controller: controller
+      };
     }
-    $controllerProvider.register(componentControllerName(name), Ctrl);
-    put(name, template);
-    return Ctrl;
-  }
 
-  function boringController(model, value) {
-    return function () {
-      this[model] = value;
-    };
-  }
+    if (options.$canActivate) {
+      controller.$canActivate = options.$canActivate;
+    }
+    if (options.$routeConfig) {
+      controller.$routeConfig = options.$routeConfig;
+    }
 
-  function put(name, template) {
-    $templateCache.put(componentTemplatePath(name), [200, template, {}]);
+    $compileProvider.directive(name, factory);
   }
 
   function compile(template) {
     elt = $compile('<div>' + template + '</div>')($rootScope);
     $rootScope.$digest();
     return elt;
+  }
+
+  function instructionFor(componentType) {
+    return jasmine.objectContaining({componentType: componentType});
   }
 });

@@ -1,2 +1,3 @@
-declare var React: any;
-export default React;
+export var createElement: Function;
+export var render: Function;
+export var createClass: Function;

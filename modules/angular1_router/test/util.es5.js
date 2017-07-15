@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright Google Inc. All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
 /*
  * Helpers to keep tests DRY
  */
@@ -16,18 +24,13 @@ function dashCase(str) {
   });
 }
 
-function boringController (model, value) {
-  return function () {
-    this[model] = value;
-  };
-}
 
 function provideHelpers(fn, preInject) {
   return function () {
     var elt,
         $compile,
         $rootScope,
-        $router,
+        $rootRouter,
         $templateCache,
         $controllerProvider;
 
@@ -37,10 +40,10 @@ function provideHelpers(fn, preInject) {
       $controllerProvider = _$controllerProvider_;
     });
 
-    inject(function(_$compile_, _$rootScope_, _$router_, _$templateCache_) {
+    inject(function(_$compile_, _$rootScope_, _$rootRouter_, _$templateCache_) {
       $compile = _$compile_;
       $rootScope = _$rootScope_;
-      $router = _$router_;
+      $rootRouter = _$rootRouter_;
       $templateCache = _$templateCache_;
     });
 
@@ -77,7 +80,7 @@ function provideHelpers(fn, preInject) {
 
     fn({
       registerComponent: registerComponent,
-      $router: $router,
+      $rootRouter: $rootRouter,
       put: put,
       compile: compile
     })
